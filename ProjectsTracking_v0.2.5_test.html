@@ -1,0 +1,723 @@
+<html lang="en">
+<head>
+    <meta charset="" harset="utf-8">
+    <title>Tracking</title>
+    <link rel="stylesheet" href="https://code.jquery.com/ui/1.11.4/themes/smoothness/jquery-ui.css">
+    <link rel="stylesheet" href="http://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.10.16/css/jquery.dataTables.min.css">
+    <link rel="stylesheet" href="https://cdn.datatables.net/select/1.2.5/css/select.dataTables.min.css">
+
+    <script src="https://code.jquery.com/jquery-1.10.2.js"></script>
+    <script src="https://code.jquery.com/ui/1.11.4/jquery-ui.js"></script>
+    <script src="https://malsup.github.io/jquery.blockUI.js"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/js/bootstrap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/1000hz-bootstrap-validator/0.11.9/validator.min.js"></script>
+    <script src="https://cdn.datatables.net/1.10.16/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/select/1.2.5/js/dataTables.select.min.js"></script>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.14.1/moment.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment-timezone/0.5.5/moment-timezone-with-data.min.js"></script>
+    
+    <script>
+    //
+    // This is version 0.2.2 (test)
+    //    
+
+    var WEBAPP_URL = "https://script.google.com/macros/s/AKfycbxYvSlMdkjUhE8PB1lHpvv-M81mwvFvxRrnJPRmLKIt_DjmKw0/exec";
+
+    var TIMEZONE = "America/Los_Angeles";
+
+    var _selectedRecord = null;
+    var _clients = [];
+    var _experts = [];
+
+
+    $(function() {
+        $("#tabs").tabs({
+            activate: function(event, ui) {
+                var tab = ui.newPanel.attr('id');
+                activate(tab);
+            }
+        });
+
+        loadClients();
+        loadExperts();
+
+        defineAwaitingScheduleTab();
+        activateAwaitingSchedule();
+
+        setupDeleteRecordButton();
+
+    });
+
+    function loadClients() {
+        $.ajax({
+            url: WEBAPP_URL,
+            data: {
+                action: "getClients",
+            },
+            success: function(response) {
+                var jsonResponse = JSON.parse(response);
+                if (jsonResponse.code != "OK") {
+                    alert("Problems when talking with the server: " +jsonResponse.data);
+                    return;
+                }
+                jsonResponse.data.forEach(function(elem, i){
+                    _clients.push({name:elem.name});
+                });
+            }    
+        });
+    }
+
+    function loadExperts() {
+        $.ajax({
+            url: WEBAPP_URL,
+            data: {
+                action: "getExperts",
+            },
+            success: function(response) {
+                var jsonResponse = JSON.parse(response);
+                if (jsonResponse.code != "OK") {
+                    alert("Problems when talking with the server: " +jsonResponse.data);
+                    return;
+                }
+
+                jsonResponse.data.forEach(function(elem, i){
+                    _experts.push({name:elem.name});
+                });
+            }    
+        });
+    }
+
+    function defineAwaitingScheduleTab() {
+        var table = $('#awaitingScheduleTable').DataTable({
+            ajax: WEBAPP_URL+"?action=getAwaitingSchedulingRecords",
+            processing: true,
+            deferLoading: 0,
+            // dom: 'Bfrtip',
+            select: {
+                style: "single",
+            },
+            columns: [
+                { data: "plaintiff" },
+                { data: "client" },
+                { data: "expert" },
+                { data: "trialVenue" },
+                { data: "trialDate" },
+                { data: "id",
+                  visible:false
+                },
+                { data: "contact",
+                  visible:false
+                },
+                { data: "expertAddress",
+                  visible:false
+                },
+            ],          
+            columnDefs: [{ 
+                targets: 4,
+                render:  function ( data, type, row, meta ) {
+                    if ( type === 'display' || type === 'filter' ) {
+                        if (!data){
+                            return ""; 
+                        }    
+                        return moment(data).tz(TIMEZONE).format('MMMM Do YYYY');
+                    }
+                    return data;    
+                }
+            }],     
+            drawCallback: function () {
+                var api = this.api();
+                api.rows( { page: 'current' } ).every( function () {
+                    var record = this.data();
+                    api.cell( this.index(), 1 ).node().setAttribute( 'title', "Contact is " + record.contact);
+                    if (record.expertAddress) {
+                        api.cell( this.index(), 2 ).node().setAttribute( 'title', "The address is " + record.expertAddress);                    
+                    }
+                });
+            },
+        });
+
+        table.on('draw.dt', function () {
+            $('[data-toggle="tooltip"]').tooltip();
+        }).on( 'select', function ( e, dt, type, indexes ) {
+            $("#editRecordBtn").removeAttr("disabled");
+            $("#deleteNewRecordBtn").removeAttr("disabled");
+
+            _selectedRecord = table.rows(indexes).data().toArray()[0];    
+
+            $("#id-to-be-removed").val(_selectedRecord.id);
+            //For debug
+            //events.prepend( '<div><b>'+type+' selection</b> - '+JSON.stringify( _selectedRecord )+'</div>' );
+        }).on( 'deselect', function ( e, dt, type, indexes ) {
+            $("#editRecordBtn").attr("disabled", "disabled");
+            $("#deleteNewRecordBtn").attr("disabled", "disabled");
+
+            _selectedRecord = null;
+            $("#id-to-be-removed").val(null);
+        });
+
+        setupNewRecordButton();
+        setupEditRecordButton();
+
+        $("#editRecordBtn").attr("disabled", "disabled");
+        $("#deleteNewRecordBtn").attr("disabled", "disabled");
+    }
+
+    function setupNewRecordButton(){
+        $("#newRecordBtn").off("click");
+        $("#newRecordBtn").click(setupNewRecordForm);
+    }
+
+    function setupEditRecordButton(){
+        $("#editRecordBtn").off("click");
+        $("#editRecordBtn").click(setupEditRecordForm);
+    }
+
+    function setupDeleteRecordButton(){
+        $("#delete-btn").off("click");
+        $("#delete-btn").click(deleteRecord);
+    }
+
+    function deleteRecord(event) {
+        $("#delete-record-modal").modal('hide');
+        $.blockUI({ message: null });
+        $.ajax({
+            url: WEBAPP_URL,
+            data: {
+                action: "deleteRecord",
+                id: $("#id-to-be-removed").val(),
+            },
+            success: function(response) {
+                console.log("Success!");
+
+                var jsonResponse = JSON.parse(response);
+                if (jsonResponse.code != "OK") {
+                    alert("Problems when talking with the server: " +jsonResponse.data);
+                }
+//TODO: this will be called from all the tabs, so we would want yo go back to the appropriate tab                
+                activateAwaitingSchedule();
+                $.unblockUI();
+            }
+        });
+    } 
+
+    // function setupImportEditsHandler() {
+    //     var columnValues = $(this).parent().siblings().map(function() {
+    //         return $(this).text();
+    //     }).get();
+    //     setupEditsImportHandler(columnValues, updateImport);
+    // }
+
+
+    // function setupEditsImportHandler(columnValues, handler) {
+
+    //     var modalBody = $('<div id="modalContent"></div>');
+    //     var modalForm = createEditImportForm(columnValues[0], columnValues[1], columnValues[2], columnValues[6]);
+    //     modalBody.append(modalForm);
+    //     $('.modal-body').html(modalBody);
+
+    //     $('#freq').val(columnValues[3]);
+    //     $('#time').val(columnValues[4]);
+    //     $('#minute').val(columnValues[5]);
+
+    //     $("#saveBtn").off("click");
+    //     $("#saveBtn").click(handler);
+    // }
+
+    // function createEditImportForm(name, ssID, tab, lastSync) {
+
+    //     var modalForm = $('<form id="theForm" role="form" name="modalForm" action="#" ></form>');
+
+    //     modalForm.append('<input type="hidden" name="oldName" id="oldName" value="' + name + '" />');
+
+    //     var formGroup = $('<div class="form-group"></div>');
+    //     formGroup.append('<label for="name">File</label>');
+    //     formGroup.append('<input class="form-control" name="name" id="name" value="' + name + '" />');
+    //     modalForm.append(formGroup);
+
+    //     formGroup = $('<div class="form-group"></div>');
+    //     formGroup.append('<label for="ssID">Spreasheet ID</label>');
+    //     formGroup.append('<input class="form-control" name="ssID" id="ssID" value="' + ssID + '" />');
+    //     modalForm.append(formGroup);
+
+    //     formGroup = $('<div class="form-group"></div>');
+    //     formGroup.append('<label for="tab">Tab</label>');
+    //     formGroup.append('<input class="form-control" name="tab" id="tab" value="' + tab + '" />');
+    //     modalForm.append(formGroup);
+
+    //     formGroup = $('<div class="form-group"></div>');
+    //     formGroup.append('<label for="freq">Frequency</label>');
+    //     formGroup.append('<select class="form-control" name="freq" id="freq"><option value="none" selected>None</option><option value="hourly">Hourly</option><option value="daily">Daily</option><option value="weekly">Weekly</option></select>');
+    //     modalForm.append(formGroup);
+
+    //     formGroup = $('<div class="form-group"></div>');
+    //     formGroup.append('<label for="freq">Time</label><br/>');
+    //     var hourField = '<select name="time" id="time">';
+    //     for (var i = 0; i<=23; i++){
+    //         hourField += '<option value="'+i+'" selected>'+i+'</option>';
+    //     }
+    //     hourField += '</select>';
+    //     formGroup.append(hourField);
+    //     var minuteField = '<select name="minute" id="minute">';
+    //     for (var i = 0; i<=55; i+=5){
+    //         minuteField += '<option value="'+i+'" selected>'+i+'</option>';
+    //     }
+    //     minuteField += '</select>';
+    //     formGroup.append(minuteField);
+    //     modalForm.append(formGroup);
+
+    //     formGroup = $('<div class="form-group"></div>');
+    //     formGroup.append('<label for="lastSync">Last successful sync</label>');
+    //     formGroup.append('<input class="form-control" disabled name="lastSync" id="lastSync" value="' + lastSync + '" />');
+    //     modalForm.append(formGroup);
+
+    //     return modalForm;
+    // }
+
+    // function updateImport(event) {
+    //     updateConfigItem(event, "updateImport", "imports");
+    // }
+
+    // function updateConfigItem(event, remoteAction, tab) {
+    //     // $("#myModal").modal('hide');
+    //     // $.blockUI({ message: null });
+    //     // $.ajax({
+    //     //     url: WEBAPP_URL,
+    //     //     data: {
+    //     //         action: remoteAction,
+    //     //         oldName: $("#oldName").val(), //it will have no effect for exports
+    //     //         name: $("#name").val(),
+    //     //         ssID: $("#ssID").val(),
+    //     //         tab: $("#tab").val(),
+    //     //         freq: $("#freq").val(),
+    //     //         time: $("#time").val(),
+    //     //         minute: $("#minute").val()
+    //     //     },
+    //     //     success: function(response) {
+    //     //         console.log("Success!");
+    //     //         console.log(JSON.stringify(response));
+    //     //         if (response.code !== "OK") {
+    //     //             alert(response.payload);
+    //     //         }
+    //     //         activate(tab);
+    //     //         $.unblockUI();
+    //     //     }
+    //     // });
+    // }
+
+    function setupNewRecordForm() {
+
+        $("#new-record-form")[0].reset();
+
+        $('#client').html('');
+        var clientsSelect = $('#client');
+        clientsSelect.append($('<option>', { value : "", text: "" }));
+
+        _clients.forEach(function(elem, i){
+            clientsSelect.append($('<option>', { 
+                value: elem.name,
+                text : elem.name
+            }));
+        });
+
+        $('#expert').html('');
+        var expertsSelect = $('#expert');
+        expertsSelect.append($('<option>', { value : "", text: "" }));
+
+        _experts.forEach(function(elem, i){
+            expertsSelect.append($('<option>', { 
+                value: elem.name,
+                text : elem.name
+            }));
+        });
+
+        $("#trialDate").datepicker();
+        $("#trialDate").attr("readonly", true);
+
+        $("#new-record-form").validator('update');
+        $('#new-record-form').validator().on('submit', function (e) {
+            if (!e.isDefaultPrevented()) {
+                $("#create-btn").attr("disabled", "disabled");
+                newRecord();
+                e.preventDefault();
+            }
+        });
+    }
+
+    function newRecord(event) {
+        $.blockUI({ message: null });
+        $.ajax({
+            url: WEBAPP_URL,
+            data: {
+                action: "newRecord",
+                plaintiff: $("#plaintiff").val(),
+                client: $("#client").val(),
+                expert: $("#expert").val(),
+                trialVenue: $("#trialVenue").val(),
+                trialDate: $("#trialDate").val(),
+            },
+            success: function(response) {
+                var jsonResponse = JSON.parse(response);
+                if (jsonResponse.code != "OK") {
+                    alert("Problems when talking with the server: " +jsonResponse.data);
+                }                
+                $("#create-btn").removeAttr("disabled");
+                $("#new-record-modal").modal('hide');
+                activateAwaitingSchedule();
+                $.unblockUI();
+            }
+        });
+    }
+
+    function setupEditRecordForm() {
+
+        $("#edit-record-form")[0].reset();
+
+        $('#client-edit').html('');
+        var clientsSelect = $('#client-edit');
+        clientsSelect.append($('<option>', { value : "", text: "" }));
+
+        _clients.forEach(function(elem, i){
+            clientsSelect.append($('<option>', { 
+                value: elem.name,
+                text : elem.name
+            }));
+        });
+
+        $('#expert-edit').html('');
+        var expertsSelect = $('#expert-edit');
+        expertsSelect.append($('<option>', { value : "", text: "" }));
+
+        _experts.forEach(function(elem, i){
+            expertsSelect.append($('<option>', { 
+                value: elem.name,
+                text : elem.name
+            }));
+        });
+
+
+        $("#id-edit").val(_selectedRecord.id);
+        $("#plaintiff-edit").val(_selectedRecord.plaintiff);
+        $("#client-edit").val(_selectedRecord.client);
+        $("#expert-edit").val(_selectedRecord.expert);
+        $("#trialVenue-edit").val(_selectedRecord.trialVenue);
+        if (_selectedRecord.trialDate) {
+            $("#trialDate-edit").val(moment(_selectedRecord.trialDate).tz(TIMEZONE).format("MM/DD/YYYY"));
+        }    
+        $("#trialDate-edit").datepicker();
+        $("#trialDate-edit").attr("readonly", true);
+
+        $("#edit-record-form").validator('update');
+        $('#edit-record-form').validator().on('submit', function (e) {
+            if (!e.isDefaultPrevented()) {
+                $("#save-edit-btn").attr("disabled", "disabled");
+                saveRecord();
+                e.preventDefault();
+            }
+        });
+    }
+
+    function saveRecord(event) {
+        $.blockUI({ message: null });
+        $.ajax({
+            url: WEBAPP_URL,
+            data: {
+                action: "updateRecord",
+                id: $("#id-edit").val(),
+                plaintiff: $("#plaintiff-edit").val(),
+                client: $("#client-edit").val(),
+                expert: $("#expert-edit").val(),
+                trialVenue: $("#trialVenue-edit").val(),
+                trialDate: $("#trialDate-edit").val(),
+            },
+            success: function(response) {
+                var jsonResponse = JSON.parse(response);
+                if (jsonResponse.code != "OK") {
+                    alert("Problems when talking with the server: " +jsonResponse.data);
+                }                
+                $("#save-edit-btn").removeAttr("disabled");
+                $("#edit-record-modal").modal('hide');
+                activateAwaitingSchedule();
+                $.unblockUI();
+            }
+        });
+    }
+
+
+    function activate(tab) {
+        if (tab === "awaitingSchedule") {
+            activateAwaitingSchedule();                
+        // } else if (tab === "...") {
+        } else if (tab === "logs") {
+            activateLogs();
+        }
+    }
+
+    function activateAwaitingSchedule() {
+        console.log("activateAwaitingSchedule tab");
+
+        $('#awaitingScheduleTable').DataTable().ajax.reload();
+    }      
+
+    function activateLogs() {
+        $.blockUI({ message: null });
+        $.ajax({
+            url: WEBAPP_URL,
+            data: {
+                action: "getLogs",
+                last: 50
+            },
+            success: function(response) {
+                var jsonResponse = JSON.parse(response);
+                if (jsonResponse.code != "OK") {
+                    alert("Problems when talking with the server: " +jsonResponse.data);
+                     $.unblockUI();
+                    return;
+                }
+                $("#logsTable td").parent().remove();
+                var tableBody = $('#logsTable tbody');
+                jsonResponse.data.forEach(function(row) {
+                    tableBody.append(
+                        $('<tr>').append(
+                            $('<td style="white-space: nowrap;">').append(
+                                moment(row.timestamp).tz(TIMEZONE).format("MM/DD/YYYY hh:mm:ss")
+                            )
+                        ).append(
+                            $('<td>').append(row.level)
+                        ).append(
+                            $('<td>').append(row.message)
+                        )
+                    );
+                });
+                $.unblockUI();
+            }
+        });
+    }        
+    </script>
+    <style>
+    .glyphicon-alert, .glyphicon-ok {
+        transform:scale(1.5,1.5);
+        -ms-transform:scale(1.5,1.5); /* IE 9 */
+        -moz-transform:scale(1.5,1.5); /* Firefox */
+        -webkit-transform:scale(1.5,1.5); /* Safari and Chrome */
+        -o-transform:scale(1.5,1.5); /* Opera */
+    }
+
+/*    #ui-datepicker-div {
+        z-index: 1000 !important;
+    }
+*/     
+    </style>
+</head>
+
+<body>
+    <div id="tabs">
+        <ul>
+            <li><a href="#awaitingSchedule">Awaiting Schedule</a></li>
+            <li><a href="#awaitingRecords">Awaiting Records</a></li>
+            <li><a href="#awaitingIndexing">Awaiting Indexing</a></li>
+            <li><a href="#awaitingShipment">Awaiting Shipment</a></li>
+            <li><a href="#recordsShipped">Records Shipped</a></li>
+            <li><a href="#awaitingReport">Awaiting Report</a></li>
+            <li><a href="#reportDone">Report Done</a></li>
+            <li><a href="#awaitingDecision">Awaiting Deposition/Trial/Arbitration</a></li>
+            <li><a href="#closed">Closed</a></li>
+            <li><a href="#logs">Log</a></li>
+        </ul>
+        <div id="awaitingSchedule">
+            
+            <!-- TODO: remove this -->
+            <div id="events"></div>
+
+            <table id="awaitingScheduleTable" class="table table-bordered table-striped nowrap" style="width:100%">
+                <thead>
+                    <tr>
+                        <th>Plaintiff Name</th>
+                        <th>Client</th>
+                        <th>Expert</th>
+                        <th>Trial Venue</th>
+                        <th>Trial Date</th>
+                        <th>Id</th>
+                        <th>Contact</th>
+                        <th>Expert Address</th>
+                    </tr>
+                </thead>
+                <tbody />
+            </table>
+            <button id="newRecordBtn" class="btn btn-primary" data-toggle='modal' data-target='#new-record-modal'>New</button>
+            <button id="editRecordBtn" class="btn btn-success" data-toggle='modal' data-target='#edit-record-modal'>Edit</button>
+            <button id="deleteNewRecordBtn" class="btn btn-danger" data-toggle='modal' data-target='#delete-record-modal'>Delete</button>
+        </div>
+<!-- ... -->
+        <div id="logs">
+            <table id="logsTable" class="table table-bordered table-striped">
+                <thead>
+                    <tr>
+                        <th>Timestamp</th>
+                        <th>Level</th>
+                        <th>Message</th>
+                    </tr>
+                </thead>
+                <tbody />
+            </table>
+        </div>
+    </div>
+    <div class="modal fade" id="new-record-modal" tabindex="-1" role="dialog">
+        <div class="modal-dialog">
+            <div id="new-record-content" class="modal-content">
+                
+                <form id="new-record-form" data-toggle="validator" data-disable="true" role="form" name="modalForm" action="#" >
+
+                <div class="modal-header">
+                    <button type="button" class="close" data-dismiss="modal"> <span aria-hidden="true" class="">x</span><span class="sr-only">Close</span>
+                    </button>
+                    <h4 class="modal-title" id="myModalLabel">New Record</h4>
+                </div>
+                <div id="new-record-body" class="modal-body">
+                    <div class="form-group  has-feedback">
+                        <label for="name">Plaintiff</label>
+                        <div class="input-group">
+                            <input class="form-control" name="plaintiff" id="plaintiff" required/>
+                            <span class="glyphicon form-control-feedback" aria-hidden="true"></span>
+                            <div class="help-block with-errors"></div>
+                        </div>
+                    </div>
+                    <div class="form-group has-feedback">
+                        <label for="client">Client</label>
+                        <div class="input-group">
+                            <select class="form-control" name="client" id="client" required></select>
+                            <span class="glyphicon form-control-feedback" aria-hidden="true"></span>
+                            <div class="help-block with-errors"></div>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="expert">Expert</label>
+                        <div class="input-group">
+                            <select class="form-control" name="expert" id="expert"></select>
+                        </div>
+                    </div>
+                    <div class="form-group has-feedback">
+                        <label for="trialVenue">Trial venue</label>
+                        <div class="input-group">
+                            <input class="form-control" name="trialVenue" id="trialVenue" required/>
+                            <span class="glyphicon form-control-feedback" aria-hidden="true"></span>
+                            <div class="help-block with-errors"></div>
+                        </div>
+                    </div>                    
+                    <div class="form-group">
+                        <label for="trialDate">Trial date</label>
+                        <input class="form-control" name="trialDate" id="trialDate" />
+                    </div>                    
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+                    <button id="create-btn" type="submit" class="btn btn-primary">Create record</button>
+                </div>
+
+                </form>
+
+            </div>
+        </form>
+        </div>
+    </div>    
+<!--     <div class="modal fade" id="myModal" tabindex="-1" role="dialog" aria-labelledby="myModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <button type="button" class="close" data-dismiss="modal"> <span aria-hidden="true" class="">x</span><span class="sr-only">Close</span>
+                    </button>
+                    <h4 class="modal-title" id="myModalLabel">Edit form</h4>
+                </div>
+                <div class="modal-body"></div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+                    <button id="saveBtn" type="button" class="btn btn-primary">Save changes</button>
+                </div>
+            </div>
+        </div>
+    </div> -->
+    <div class="modal fade" id="edit-record-modal" tabindex="-1" role="dialog">
+        <div class="modal-dialog">
+            <div id="edit-record-content" class="modal-content">
+                
+                <form id="edit-record-form" data-toggle="validator" data-disable="true" role="form" name="modalForm" action="#" >
+                    <input type="hidden" name="id" id="id-edit" value="" />
+
+                <div class="modal-header">
+                    <button type="button" class="close" data-dismiss="modal"> <span aria-hidden="true" class="">x</span><span class="sr-only">Close</span>
+                    </button>
+                    <h4 class="modal-title" id="myModalLabel">Edit Record</h4>
+                </div>
+                <div id="edit-record-body" class="modal-body">
+                    <div class="form-group has-feedback">
+                        <label for="name">Plaintiff</label>
+                        <div class="input-group">
+                            <input class="form-control" name="plaintiff" id="plaintiff-edit" required/>
+                            <span class="glyphicon form-control-feedback" aria-hidden="true"></span>
+                            <div class="help-block with-errors"></div>
+                        </div>
+                    </div>
+                    <div class="form-group has-feedback">
+                        <label for="client">Client</label>
+                        <div class="input-group">
+                            <select class="form-control" name="client" id="client-edit" required></select>
+                            <span class="glyphicon form-control-feedback" aria-hidden="true"></span>
+                            <div class="help-block with-errors"></div>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="expert">Expert</label>
+                        <div class="input-group">
+                            <select class="form-control" name="expert" id="expert-edit"></select>
+                            <div class="help-block with-errors"></div>
+                        </div>
+                    </div>
+                    <div class="form-group has-feedback">
+                        <label for="trialVenue">Trial venue</label>
+                        <div class="input-group">
+                            <input class="form-control" name="trialVenue" id="trialVenue-edit" required/>
+                            <span class="glyphicon form-control-feedback" aria-hidden="true"></span>
+                            <div class="help-block with-errors"></div>
+                        </div>
+                    </div>                    
+                    <div class="form-group">
+                        <input class="form-control" name="trialDate-edit" id="trialDate-edit"/>
+                    </div>                    
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+                    <button id="save-edit-btn" type="submit" class="btn btn-primary">Save changes</button>
+                </div>
+
+                </form>
+
+            </div>
+        </form>
+        </div>
+    </div>    
+    <div class="modal fade" id="delete-record-modal" tabindex="-1" role="dialog" aria-labelledby="myModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+
+                <form id="delete-record-form" data-toggle="validator" data-disable="true" role="form" name="modalForm" action="#" >
+
+                <div class="modal-header">
+                    <button type="button" class="close" data-dismiss="modal"> <span aria-hidden="true" class="">x</span><span class="sr-only">Close</span>
+                    </button>
+                    <h4 class="modal-title" id="myModalLabel">Confirmation needed</h4>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" name="id" id="id-to-be-removed" value="" />
+                    <p><span class="ui-icon ui-icon-alert" style="float:left; margin:0 7px 20px 0;"></span>This record will be permanently deleted. Are you sure?</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
+                    <button id="delete-btn" type="button" class="btn btn-primary">Do it!</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+
+</html>
