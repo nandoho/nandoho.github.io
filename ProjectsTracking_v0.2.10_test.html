@@ -46,22 +46,22 @@
         requiredValues:[]};
     _statusesData["Awaiting Shipment"] = {tab:"awaitingShipment", 
         requiredFields:["#plaintiff-edit", "#client-edit", "#trialVenue-edit", "#jobType-edit", "#expert-edit", "#indexer-edit", "#formatReceived-edit", "#recordsReceived-edit"], 
-        requiredValues:[{field:"#indexed-edit", value:"YES"}]};
+        requiredValues:[{field:"#indexed-edit", value:"Yes"}]};
     _statusesData["Records Shipped / Awaiting Report"] = {tab:"recordShipped", 
         requiredFields:["#plaintiff-edit", "#client-edit", "#trialVenue-edit", "#jobType-edit", "#expert-edit", "#indexer-edit", "#formatReceived-edit", "#recordsReceived-edit"], 
-        requiredValues:[{field:"#indexed-edit", value:"YES"}, {field:"#sent-edit", value:"YES"}]};
+        requiredValues:[{field:"#indexed-edit", value:"Yes"}, {field:"#sent-edit", value:"Yes"}]};
     _statusesData["Report Done"] = {tab:"reportDone", 
         requiredFields:["#plaintiff-edit", "#client-edit", "#trialVenue-edit", "#jobType-edit", "#expert-edit", "#indexer-edit", "#formatReceived-edit", "#recordsReceived-edit"],
-        requiredValues:[{field:"#indexed-edit", value:"YES"}, {field:"#sent-edit", value:"YES"}, {field:"#reportFinished-edit", value:"YES"}]};
+        requiredValues:[{field:"#indexed-edit", value:"Yes"}, {field:"#sent-edit", value:"Yes"}, {field:"#reportFinished-edit", value:"Yes"}]};
     _statusesData["Awaiting Deposition"] = {tab:"awaitingDeposition", 
         requiredFields:["#plaintiff-edit", "#client-edit", "#trialVenue-edit", "#jobType-edit", "#expert-edit", "#indexer-edit", "#formatReceived-edit", "#recordsReceived-edit"], 
-        requiredValues:[{field:"#indexed-edit", value:"YES"}, {field:"#sent-edit", value:"YES"}, {field:"#reportFinished-edit", value:"YES"}, {field:"#caseStatus-edit", value:"Going to deposition"}]};
+        requiredValues:[{field:"#indexed-edit", value:"Yes"}, {field:"#sent-edit", value:"Yes"}, {field:"#reportFinished-edit", value:"Yes"}, {field:"#caseStatus-edit", value:"Going to deposition"}]};
     _statusesData["Awaiting Trial / Arbitration"] = {tab:"awaitingTrial", 
         requiredFields:["#plaintiff-edit", "#client-edit", "#trialVenue-edit", "#jobType-edit", "#expert-edit", "#indexer-edit", "#formatReceived-edit", "#recordsReceived-edit"], 
-        requiredValues:[{field:"#indexed-edit", value:"YES"}, {field:"#sent-edit", value:"YES"}, {field:"#reportFinished-edit", value:"YES"}, {field:"#caseStatus-edit", value:"Going to Trial/Arbitration"}]};
+        requiredValues:[{field:"#indexed-edit", value:"Yes"}, {field:"#sent-edit", value:"Yes"}, {field:"#reportFinished-edit", value:"Yes"}, {field:"#caseStatus-edit", value:"Going to Trial/Arbitration"}]};
     _statusesData["Closed"] = {tab:"closed", 
         requiredFields:["#plaintiff-edit", "#client-edit", "#trialVenue-edit", "#jobType-edit", "#expert-edit", "#indexer-edit", "#formatReceived-edit", "#recordsReceived-edit"], 
-        requiredValues:[{field:"#indexed-edit", value:"YES"}, {field:"#sent-edit", value:"YES"}, {field:"#reportFinished-edit", value:"YES"}, {field:"#caseStatus-edit", value:"Settled"}]};
+        requiredValues:[{field:"#indexed-edit", value:"Yes"}, {field:"#sent-edit", value:"Yes"}, {field:"#reportFinished-edit", value:"Yes"}, {field:"#caseStatus-edit", value:"Settled"}]};
 
     $(function() {
         $("#tabs").tabs({
