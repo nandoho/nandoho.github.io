@@ -1,0 +1,1532 @@
+<html lang="en">
+<head>
+    <meta charset="" harset="utf-8">
+    <title>Tracking</title>
+    <link rel="stylesheet" href="https://code.jquery.com/ui/1.11.4/themes/smoothness/jquery-ui.css">
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.10.16/css/jquery.dataTables.min.css">
+    <link rel="stylesheet" href="https://cdn.datatables.net/select/1.2.5/css/select.dataTables.min.css">
+
+    <script src="https://code.jquery.com/jquery-1.10.2.js"></script>
+    <script src="https://code.jquery.com/ui/1.11.4/jquery-ui.js"></script>
+    <script src="https://malsup.github.io/jquery.blockUI.js"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/js/bootstrap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/1000hz-bootstrap-validator/0.11.9/validator.min.js"></script>
+    <script src="https://cdn.datatables.net/1.10.16/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/select/1.2.5/js/dataTables.select.min.js"></script>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.14.1/moment.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment-timezone/0.5.5/moment-timezone-with-data.min.js"></script>
+    
+    <script>
+    //
+    // This is version 0.2.10 (test)
+    //    
+
+    var WEBAPP_URL = "https://script.google.com/macros/s/AKfycbzuE4vz74MwYAxS6ObWqdalqzlxejDjppptk6mYr_W6gQqPA60A/exec";
+
+    var TIMEZONE = "America/Los_Angeles";
+
+    var _selectedRecord = null;
+    var _currentTab = "awaitingSchedule";
+    var _clients = [];
+    var _experts = [];
+    var _indexers = [];
+    var _catalogs = [];
+
+    var _statusesData = [];
+    _statusesData["Awaiting Schedule"] = {tab:"awaitingSchedule", 
+        requiredFields:["#plaintiff-edit", "#client-edit", "#trialVenue-edit"],
+        requiredValues:[]};
+    _statusesData["Awaiting Records"] = {tab:"awaitingRecords", 
+        requiredFields:["#plaintiff-edit", "#client-edit", "#trialVenue-edit", "#jobType-edit", "#expert-edit"],
+        requiredValues:[]};
+    _statusesData["Awaiting Indexing"] = {tab:"awaitingIndexing", 
+        requiredFields:["#plaintiff-edit", "#client-edit", "#trialVenue-edit", "#jobType-edit", "#expert-edit", "#indexer-edit", "#formatReceived-edit", "#recordsReceived-edit"],
+        requiredValues:[]};
+    _statusesData["Awaiting Shipment"] = {tab:"awaitingShipment", 
+        requiredFields:["#plaintiff-edit", "#client-edit", "#trialVenue-edit", "#jobType-edit", "#expert-edit", "#indexer-edit", "#formatReceived-edit", "#recordsReceived-edit"], 
+        requiredValues:[{field:"#indexed-edit", value:"YES"}]};
+    _statusesData["Records Shipped / Awaiting Report"] = {tab:"recordShipped", 
+        requiredFields:["#plaintiff-edit", "#client-edit", "#trialVenue-edit", "#jobType-edit", "#expert-edit", "#indexer-edit", "#formatReceived-edit", "#recordsReceived-edit"], 
+        requiredValues:[{field:"#indexed-edit", value:"YES"}, {field:"#sent-edit", value:"YES"}]};
+    _statusesData["Report Done"] = {tab:"reportDone", 
+        requiredFields:["#plaintiff-edit", "#client-edit", "#trialVenue-edit", "#jobType-edit", "#expert-edit", "#indexer-edit", "#formatReceived-edit", "#recordsReceived-edit"],
+        requiredValues:[{field:"#indexed-edit", value:"YES"}, {field:"#sent-edit", value:"YES"}, {field:"#reportFinished-edit", value:"YES"}]};
+    _statusesData["Awaiting Deposition"] = {tab:"awaitingDeposition", 
+        requiredFields:["#plaintiff-edit", "#client-edit", "#trialVenue-edit", "#jobType-edit", "#expert-edit", "#indexer-edit", "#formatReceived-edit", "#recordsReceived-edit"], 
+        requiredValues:[{field:"#indexed-edit", value:"YES"}, {field:"#sent-edit", value:"YES"}, {field:"#reportFinished-edit", value:"YES"}, {field:"#caseStatus-edit", value:"Going to deposition"}]};
+    _statusesData["Awaiting Trial / Arbitration"] = {tab:"awaitingTrial", 
+        requiredFields:["#plaintiff-edit", "#client-edit", "#trialVenue-edit", "#jobType-edit", "#expert-edit", "#indexer-edit", "#formatReceived-edit", "#recordsReceived-edit"], 
+        requiredValues:[{field:"#indexed-edit", value:"YES"}, {field:"#sent-edit", value:"YES"}, {field:"#reportFinished-edit", value:"YES"}, {field:"#caseStatus-edit", value:"Going to Trial/Arbitration"}]};
+    _statusesData["Closed"] = {tab:"closed", 
+        requiredFields:["#plaintiff-edit", "#client-edit", "#trialVenue-edit", "#jobType-edit", "#expert-edit", "#indexer-edit", "#formatReceived-edit", "#recordsReceived-edit"], 
+        requiredValues:[{field:"#indexed-edit", value:"YES"}, {field:"#sent-edit", value:"YES"}, {field:"#reportFinished-edit", value:"YES"}, {field:"#caseStatus-edit", value:"Settled"}]};
+
+    $(function() {
+        $("#tabs").tabs({
+            activate: function(event, ui) {
+                var tab = ui.newPanel.attr('id');
+                _currentTab = tab;
+                activate(tab);
+            }
+        });
+
+        loadList(_clients, "getClients");
+        loadList(_experts, "getExperts");
+        loadList(_indexers, "getIndexers");
+
+        loadCatalog("JobTypesRange");
+        loadCatalog("ReceptionStatusesRange");
+        loadCatalog("ScanOrPrintRange");
+        loadCatalog("IndexedRange");
+        loadCatalog("SentRange");
+        loadCatalog("LocationsRange");
+        loadCatalog("ReportFinishedRange");
+        loadCatalog("InvoiceSentRange");
+        loadCatalog("InvoiceReceivedRange");
+        loadCatalog("CaseStatusesRange");
+        loadCatalog("RecordsRetrievedRange");
+        loadCatalog("RecordsDuplicatedRange");
+        loadCatalog("RecordsShreddedRange");
+        loadCatalog("RecordStatusesRange");
+
+        activate("awaitingSchedule");;
+
+        setupNewRecordButton();
+        setupEditRecordButton();
+        setupDeleteRecordButton();
+        setupEditFormValidationSupport();
+
+        $("#editRecordBtn").attr("disabled", "disabled");
+        $("#deleteNewRecordBtn").attr("disabled", "disabled");
+
+    });
+
+    function loadList(list, action) {
+        $.ajax({
+            url: WEBAPP_URL,
+            jsonp: "callback",
+            dataType: "jsonp",            
+            data: {
+                action: action,
+            },
+            success: function(response) {
+                if (response.code != "OK") {
+                    alert("Problems when talking with the server: " +response.data);
+                    return;
+                }
+                response.data.forEach(function(elem, i){
+                    list.push({name:elem.name});
+                });
+            }    
+        });
+    }
+
+    function loadCatalog(catalog) {
+        $.ajax({
+            url: WEBAPP_URL,
+            jsonp: "callback",
+            dataType: "jsonp",            
+            data: {
+                action: "getCatalog",
+                catalog: catalog,
+            },
+            success: function(response) {
+                if (response.code != "OK") {
+                    alert("Problems when talking with the server: " +response.data);
+                    return;
+                }
+                _catalogs[catalog] = [];
+                response.data.forEach(function(elem, i){
+                    _catalogs[catalog].push({name:elem.name});
+                });
+                //alert("_catalogs[catalog] "+JSON.stringify(_catalogs[catalog]))
+            }    
+        });        
+    }
+
+    function renderCellAsDate( data, type, row, meta ) {
+        if ( type === 'display' || type === 'filter' ) {
+            if (!data){
+                return ""; 
+            }    
+            return moment(data).tz(TIMEZONE).format('MMMM Do YYYY');
+        }
+        return data;    
+    }   
+
+    function defineAwaitingScheduleTab() {
+        if ($.fn.DataTable.isDataTable("#awaitingScheduleTable") ) {
+            return;
+        }
+        var table = $('#awaitingScheduleTable').DataTable({
+            ajax: {
+                url: WEBAPP_URL+"?action=getRecords&status=Awaiting%20Schedule",
+                dataType: "jsonp",
+            },
+            processing: true,
+            deferLoading: 0,
+            // dom: 'Bfrtip',
+            select: {
+                style: "single",
+            },
+            columns: [
+                { data: "plaintiff" },
+                { data: "client" },
+                { data: "expert" },
+                { data: "trialVenue" },
+                { data: "trialDate" },
+                { data: "id",
+                  visible:false
+                },
+                { data: "contact",
+                  visible:false
+                },
+                { data: "expertAddress",
+                  visible:false
+                },
+            ],
+            columnDefs: [{ 
+                targets: 4,
+                render:  renderCellAsDate,
+            }],     
+            drawCallback: function () {
+                var api = this.api();
+                api.rows( { page: 'current' } ).every( function () {
+                    var record = this.data();
+                    api.cell( this.index(), 1 ).node().setAttribute( 'title', "Contact is " + record.contact);
+                    if (record.expertAddress) {
+                        api.cell( this.index(), 2 ).node().setAttribute( 'title', "The address is " + record.expertAddress);                    
+                    }
+                });
+            },
+        });
+
+        defineTableEvents(table); 
+    }
+
+    function defineAwaitingRecordsTab() {
+        if ($.fn.DataTable.isDataTable("#awaitingRecordsTable") ) {
+            return;
+        }
+        var table = $('#awaitingRecordsTable').DataTable({
+            ajax: {
+                url: WEBAPP_URL+"?action=getRecords&status=Awaiting%20Records",
+                dataType: "jsonp",
+            },
+            processing: true,
+            deferLoading: 0,
+            // dom: 'Bfrtip',
+            select: {
+                style: "single",
+            },
+            columns: [
+                { data: "plaintiff" },
+                { data: "client" },
+                { data: "expert" },
+                { data: "jobType" },
+                { data: "jobDate" },
+                { data: "recordsDue" },
+                { data: "id",
+                  visible:false
+                },
+                { data: "contact",
+                  visible:false
+                },
+                { data: "expertAddress",
+                  visible:false
+                },
+            ],
+            columnDefs: [
+                { targets: 4, render:  renderCellAsDate }, 
+                { targets: 5, render:  renderCellAsDate},
+            ],     
+            drawCallback: function () {
+                var api = this.api();
+                api.rows( { page: 'current' } ).every( function () {
+                    var record = this.data();
+                    api.cell( this.index(), 1 ).node().setAttribute( 'title', "Contact is " + record.contact);
+                    if (record.expertAddress) {
+                        api.cell( this.index(), 2 ).node().setAttribute( 'title', "The address is " + record.expertAddress);                    
+                    }
+                });
+            },
+        });
+
+        defineTableEvents(table);
+    }
+
+    function defineAwaitingIndexingTab() {
+        if ($.fn.DataTable.isDataTable("#awaitingIndexingTable") ) {
+            return;
+        }
+        var table = $('#awaitingIndexingTable').DataTable({
+            ajax: {
+                url: WEBAPP_URL+"?action=getRecords&status=Awaiting%20Indexing",
+                dataType: "jsonp",
+            },            
+            processing: true,
+            deferLoading: 0,
+            // dom: 'Bfrtip',
+            select: {
+                style: "single",
+            },
+            columns: [
+                { data: "plaintiff" },
+                { data: "client" },
+                { data: "expert" },
+                { data: "jobType" },
+                { data: "jobDate" },
+                { data: "recordsDue" },
+                { data: "indexer" },
+                { data: "formatToSend" },
+                { data: "scanOrPrint" },
+                { data: "id",
+                  visible:false
+                },
+                { data: "contact",
+                  visible:false
+                },
+                { data: "expertAddress",
+                  visible:false
+                },
+            ],
+            columnDefs: [
+                { targets: 4, render:  renderCellAsDate }, 
+                { targets: 5, render:  renderCellAsDate},
+            ],     
+            drawCallback: function () {
+                var api = this.api();
+                api.rows( { page: 'current' } ).every( function () {
+                    var record = this.data();
+                    api.cell( this.index(), 1 ).node().setAttribute( 'title', "Contact is " + record.contact);
+                    if (record.expertAddress) {
+                        api.cell( this.index(), 2 ).node().setAttribute( 'title', "The address is " + record.expertAddress);                    
+                    }
+                });
+            },
+        });
+
+        defineTableEvents(table);
+    }
+
+    function defineAwaitingShipmentTab() {
+        if ($.fn.DataTable.isDataTable("#awaitingShipmentTable") ) {
+            return;
+        }
+        var table = $('#awaitingShipmentTable').DataTable({
+            ajax: {
+                url: WEBAPP_URL+"?action=getRecords&status=Awaiting%20Shipment",
+                dataType: "jsonp",
+            },            
+            processing: true,
+            deferLoading: 0,
+            // dom: 'Bfrtip',
+            select: {
+                style: "single",
+            },
+            columns: [
+                { data: "plaintiff" },
+                { data: "client" },
+                { data: "expert" },
+                { data: "jobType" },
+                { data: "jobDate" },
+                { data: "recordsDue" },
+                { data: "formatToSend" },
+                { data: "id",
+                  visible:false
+                },
+                { data: "contact",
+                  visible:false
+                },
+                { data: "expertAddress",
+                  visible:false
+                },
+            ],
+            columnDefs: [
+                { targets: 4, render:  renderCellAsDate }, 
+                { targets: 5, render:  renderCellAsDate},
+            ],     
+            drawCallback: function () {
+                var api = this.api();
+                api.rows( { page: 'current' } ).every( function () {
+                    var record = this.data();
+                    api.cell( this.index(), 1 ).node().setAttribute( 'title', "Contact is " + record.contact);
+                    if (record.expertAddress) {
+                        api.cell( this.index(), 2 ).node().setAttribute( 'title', "The address is " + record.expertAddress);                    
+                    }
+                });
+            },
+        });
+
+        defineTableEvents(table);
+    }
+
+    function defineRecordShippedTab() {
+        if ($.fn.DataTable.isDataTable("#recordShippedTable") ) {
+            return;
+        }
+        var table = $('#recordShippedTable').DataTable({
+            ajax: {
+                url: WEBAPP_URL+"?action=getRecords&status=Records%20Shipped%20/%20Awaiting%20Report",
+                dataType: "jsonp",
+            },            
+            processing: true,
+            deferLoading: 0,
+            // dom: 'Bfrtip',
+            select: {
+                style: "single",
+            },
+            columns: [
+                { data: "plaintiff" },
+                { data: "client" },
+                { data: "expert" },
+                { data: "jobDate" },//TODO: report format: verbal or written
+                { data: "id",
+                  visible:false
+                },
+                { data: "contact",
+                  visible:false
+                },
+                { data: "expertAddress",
+                  visible:false
+                },
+            ],
+            columnDefs: [
+                { targets: 3, render:  renderCellAsDate},
+            ],     
+            drawCallback: function () {
+                var api = this.api();
+                api.rows( { page: 'current' } ).every( function () {
+                    var record = this.data();
+                    api.cell( this.index(), 1 ).node().setAttribute( 'title', "Contact is " + record.contact);
+                    if (record.expertAddress) {
+                        api.cell( this.index(), 2 ).node().setAttribute( 'title', "The address is " + record.expertAddress);                    
+                    }
+                });
+            },
+        });
+
+        defineTableEvents(table);
+    }        
+
+    function defineReportDoneTab() {
+        if ($.fn.DataTable.isDataTable("#reportDoneTable") ) {
+            return;
+        }
+        var table = $('#reportDoneTable').DataTable({
+            ajax: {
+                url: WEBAPP_URL+"?action=getRecords&status=Report%20Done",
+                dataType: "jsonp",
+            },            
+            processing: true,
+            deferLoading: 0,
+            // dom: 'Bfrtip',
+            select: {
+                style: "single",
+            },
+            columns: [
+                { data: "plaintiff" },
+                { data: "client" },
+                { data: "expert" },
+                { data: "invoiceSent" },
+                { data: "invoiceReceived" },
+                { data: "trialDate" },
+                { data: "id",
+                  visible:false
+                },
+                { data: "contact",
+                  visible:false
+                },
+                { data: "expertAddress",
+                  visible:false
+                },
+            ],
+            columnDefs: [
+                { targets: 5, render:  renderCellAsDate},
+            ],     
+            drawCallback: function () {
+                var api = this.api();
+                api.rows( { page: 'current' } ).every( function () {
+                    var record = this.data();
+                    api.cell( this.index(), 1 ).node().setAttribute( 'title', "Contact is " + record.contact);
+                    if (record.expertAddress) {
+                        api.cell( this.index(), 2 ).node().setAttribute( 'title', "The address is " + record.expertAddress);                    
+                    }
+                });
+            },
+        });
+
+        defineTableEvents(table);
+    }
+
+    function defineAwaitingDepositionTab() {
+        if ($.fn.DataTable.isDataTable("#awaitingDepositionTable") ) {
+            return;
+        }
+        var table = $('#awaitingDepositionTable').DataTable({
+            ajax: {
+                url: WEBAPP_URL+"?action=getRecords&status=Awaiting%20Deposition",
+                dataType: "jsonp",
+            },            
+            processing: true,
+            deferLoading: 0,
+            // dom: 'Bfrtip',
+            select: {
+                style: "single",
+            },
+            columns: [
+                { data: "plaintiff" },
+                { data: "client" },
+                { data: "expert" }, // TODO: Deposition venue (new field) & Deposition date (new date)
+                { data: "recordsRetrieved" },
+                { data: "recordsDuplicated" },
+                { data: "id",
+                  visible:false
+                },
+                { data: "contact",
+                  visible:false
+                },
+                { data: "expertAddress",
+                  visible:false
+                },
+            ], //TODO: the date format
+            drawCallback: function () {
+                var api = this.api();
+                api.rows( { page: 'current' } ).every( function () {
+                    var record = this.data();
+                    api.cell( this.index(), 1 ).node().setAttribute( 'title', "Contact is " + record.contact);
+                    if (record.expertAddress) {
+                        api.cell( this.index(), 2 ).node().setAttribute( 'title', "The address is " + record.expertAddress);                    
+                    }
+                });
+            },
+        });
+
+        defineTableEvents(table);
+    }
+
+    function defineAwaitingTrialTab() {
+        if ($.fn.DataTable.isDataTable("#awaitingTrialTable") ) {
+            return;
+        }
+        var table = $('#awaitingTrialTable').DataTable({
+            ajax: {
+                url: WEBAPP_URL+"?action=getRecords&status=Awaiting%20Trial%20/%20Arbitration",
+                dataType: "jsonp",
+            },            
+            processing: true,
+            deferLoading: 0,
+            // dom: 'Bfrtip',
+            select: {
+                style: "single",
+            },
+            columns: [
+                { data: "plaintiff" },
+                { data: "client" },
+                { data: "expert" },
+                { data: "trialVenue" },
+                { data: "trialDate" },
+                { data: "recordsRetrieved" },
+                { data: "recordsDuplicated" },
+                { data: "id",
+                  visible:false
+                },
+                { data: "contact",
+                  visible:false
+                },
+                { data: "expertAddress",
+                  visible:false
+                },
+            ],
+            columnDefs: [
+                { targets: 4, render:  renderCellAsDate},
+            ],     
+            drawCallback: function () {
+                var api = this.api();
+                api.rows( { page: 'current' } ).every( function () {
+                    var record = this.data();
+                    api.cell( this.index(), 1 ).node().setAttribute( 'title', "Contact is " + record.contact);
+                    if (record.expertAddress) {
+                        api.cell( this.index(), 2 ).node().setAttribute( 'title', "The address is " + record.expertAddress);                    
+                    }
+                });
+            },
+        });
+
+        defineTableEvents(table);
+    }
+
+    function defineClosedTab() {
+        if ($.fn.DataTable.isDataTable("#closedTable") ) {
+            return;
+        }
+        var table = $('#closedTable').DataTable({
+            ajax: {
+                url: WEBAPP_URL+"?action=getRecords&status=Closed",
+                dataType: "jsonp",
+            },            
+            processing: true,
+            deferLoading: 0,
+            // dom: 'Bfrtip',
+            select: {
+                style: "single",
+            },
+            columns: [
+                { data: "plaintiff" },
+                { data: "client" },
+                { data: "expert" },
+                { data: "dateSettled" },
+                { data: "invoiceReceived" },
+                { data: "recordsShredded" },
+                { data: "id",
+                  visible:false
+                },
+                { data: "contact",
+                  visible:false
+                },
+                { data: "expertAddress",
+                  visible:false
+                },
+            ],
+            columnDefs: [
+                { targets: 3, render:  renderCellAsDate},
+            ],     
+            drawCallback: function () {
+                var api = this.api();
+                api.rows( { page: 'current' } ).every( function () {
+                    var record = this.data();
+                    api.cell( this.index(), 1 ).node().setAttribute( 'title', "Contact is " + record.contact);
+                    if (record.expertAddress) {
+                        api.cell( this.index(), 2 ).node().setAttribute( 'title', "The address is " + record.expertAddress);                    
+                    }
+                });
+            },
+        });
+
+        defineTableEvents(table);
+    }
+
+    function defineTableEvents(table) {
+        table.on('draw.dt', function () {
+            $('[data-toggle="tooltip"]').tooltip();
+        }).on( 'select', function ( e, dt, type, indexes ) {
+            $("#editRecordBtn").removeAttr("disabled");
+            $("#deleteNewRecordBtn").removeAttr("disabled");
+
+            _selectedRecord = table.rows(indexes).data().toArray()[0];    
+
+            $("#id-to-be-removed").val(_selectedRecord.id);
+            //For debug
+            //events.prepend( '<div><b>'+type+' selection</b> - '+JSON.stringify( _selectedRecord )+'</div>' );
+        }).on( 'deselect', function ( e, dt, type, indexes ) {
+            tableDeselect();
+        });
+    }
+
+    function tableDeselect() {
+        _selectedRecord = null;
+        $("#editRecordBtn").attr("disabled", "disabled");
+        $("#deleteNewRecordBtn").attr("disabled", "disabled");
+        $("#id-to-be-removed").val(null);
+    }
+
+    function setupNewRecordButton(){
+        $("#newRecordBtn").off("click");
+        $("#newRecordBtn").click(setupNewRecordForm);
+    }
+
+    function setupEditRecordButton(){
+        $("#editRecordBtn").off("click");
+        $("#editRecordBtn").click(setupEditRecordForm);
+    }
+
+    function setupEditFormValidationSupport() {
+        $("#recordStatus-edit").on("change", function() {
+            onRecordStatusEditChange();
+        });
+
+        $("#edit-record-form").validator({
+            custom: {
+                equals: function($el) {
+                    var matchValue = $el.data("equals") 
+                    if ($el.val() !== matchValue) {
+                        return "This should be  " + matchValue;
+                    }
+                }
+            }
+        });
+
+        $("#edit-record-form").validator().on('submit', function (e) {
+            if (!e.isDefaultPrevented()) {
+                $("#save-edit-btn").attr("disabled", "disabled");
+                saveRecord();
+                e.preventDefault();
+            }
+        });
+    }
+    
+    function onRecordStatusEditChange() {
+        $("#edit-record-form :input").removeAttr("required");
+        _statusesData[$("#recordStatus-edit").val()].requiredFields.forEach(function(elem){
+            $(elem).attr("required", "required");            
+        });
+        $("#edit-record-form :input").removeAttr("data-equals");
+        _statusesData[$("#recordStatus-edit").val()].requiredValues.forEach(function(elem){
+            $(elem.field).attr("data-equals", elem.value);            
+        });
+        $("#edit-record-form").validator('update');
+    }     
+
+    function setupDeleteRecordButton(){
+        $("#delete-btn").off("click");
+        $("#delete-btn").click(deleteRecord);
+    }
+
+    function deleteRecord(event) {
+        $("#delete-record-modal").modal('hide');
+        $.blockUI({ message: null });
+        $.ajax({
+            url: WEBAPP_URL,
+            jsonp: "callback",
+            dataType: "jsonp",              
+            data: {
+                action: "deleteRecord",
+                id: $("#id-to-be-removed").val(),
+            },
+            success: function(response) {
+                console.log("Success!");
+                if (response.code != "OK") {
+                    alert("Problems when talking with the server: " +response.data);
+                }
+                activate(_currentTab);
+                $.unblockUI();
+            }
+        });
+    } 
+
+    function setupNewRecordForm() {
+
+        $("#new-record-form")[0].reset();
+
+        $('#client').html('');
+        var clientsSelect = $('#client');
+        clientsSelect.append($('<option>', { value : "", text: "" }));
+
+        _clients.forEach(function(elem, i){
+            clientsSelect.append($('<option>', { 
+                value: elem.name,
+                text : elem.name
+            }));
+        });
+
+        $('#expert').html('');
+        var expertsSelect = $('#expert');
+        expertsSelect.append($('<option>', { value : "", text: "" }));
+
+        _experts.forEach(function(elem, i){
+            expertsSelect.append($('<option>', { 
+                value: elem.name,
+                text : elem.name
+            }));
+        });
+
+        $("#trialDate").datepicker();
+        $("#trialDate").attr("readonly", true);
+
+        $("#new-record-form").validator('update');
+        $('#new-record-form').validator().on('submit', function (e) {
+            if (!e.isDefaultPrevented()) {
+                $("#create-btn").attr("disabled", "disabled");
+                newRecord();
+                e.preventDefault();
+            }
+        });
+    }
+
+    function newRecord(event) {
+        $.blockUI({ message: null });
+        $.ajax({
+            url: WEBAPP_URL,
+            jsonp: "callback",
+            dataType: "jsonp",              
+            data: {
+                action: "newRecord",
+                plaintiff: $("#plaintiff").val(),
+                client: $("#client").val(),
+                expert: $("#expert").val(),
+                trialVenue: $("#trialVenue").val(),
+                trialDate: $("#trialDate").val(),
+            },
+            success: function(response) {
+                if (response.code != "OK") {
+                    alert("Problems when talking with the server: " +response.data);
+                }                
+                $("#create-btn").removeAttr("disabled");
+                $("#new-record-modal").modal('hide');
+                activate("awaitingSchedule");
+                $.unblockUI();
+            }
+        });
+    }
+
+    function loadSelectValues(selectId, values, required) {
+        var select = $(selectId);
+        select .html('');
+        if (!required) {
+            select.append($('<option>', { value : "", text: "" }));
+        }    
+        values.forEach(function(elem, i){
+            select.append($('<option>', { 
+                value: elem.name,
+                text : elem.name
+            }));
+        });
+    }
+
+    function setupEditRecordForm() {
+
+        $("#edit-record-form")[0].reset();
+
+        $("#id-edit").val(_selectedRecord.id);
+        $("#plaintiff-edit").val(_selectedRecord.plaintiff);
+
+        loadSelectValues("#client-edit", _clients);
+        $("#client-edit").val(_selectedRecord.client);
+
+        loadSelectValues("#expert-edit", _experts);
+        $("#expert-edit").val(_selectedRecord.expert);
+
+        loadSelectValues("#jobType-edit", _catalogs["JobTypesRange"]);
+        $("#jobType-edit").val(_selectedRecord.jobType);
+
+        if (_selectedRecord.jobDate) {
+            $("#jobDate-edit").val(moment(_selectedRecord.jobDate).tz(TIMEZONE).format("MM/DD/YYYY"));
+        }    
+        $("#jobDate-edit").datepicker();
+        $("#jobDate-edit").attr("readonly", true);
+
+        $("#trialVenue-edit").val(_selectedRecord.trialVenue);
+        if (_selectedRecord.trialDate) {
+            $("#trialDate-edit").val(moment(_selectedRecord.trialDate).tz(TIMEZONE).format("MM/DD/YYYY"));
+        }    
+        $("#trialDate-edit").datepicker();
+        $("#trialDate-edit").attr("readonly", true);
+
+        loadSelectValues("#recordsReceived-edit", _catalogs["ReceptionStatusesRange"]);
+        $("#recordsReceived-edit").val(_selectedRecord.recordsReceived);
+
+        $("#formatReceived-edit").val(_selectedRecord.formatReceived);
+
+        loadSelectValues("#scanOrPrint-edit", _catalogs["ScanOrPrintRange"]);
+        $("#scanOrPrint-edit").val(_selectedRecord.scanOrPrint);
+
+        loadSelectValues("#indexed-edit", _catalogs["IndexedRange"]);
+        $("#indexed-edit").val(_selectedRecord.indexed);
+
+        loadSelectValues("#indexer-edit", _indexers);
+        $("#indexer-edit").val(_selectedRecord.indexer);
+
+        $("#hoursSpentIndexing-edit").val(_selectedRecord.hoursSpentIndexing);
+
+        loadSelectValues("#sent-edit", _catalogs["SentRange"]);
+        $("#sent-edit").val(_selectedRecord.sent);
+
+        loadSelectValues("#currentLocation-edit", _catalogs["LocationsRange"]);
+        $("#currentLocation-edit").val(_selectedRecord.currentLocation);
+
+        loadSelectValues("#reportFinished-edit", _catalogs["ReportFinishedRange"]);
+        $("#reportFinished-edit").val(_selectedRecord.reportFinished);
+
+        loadSelectValues("#invoiceSent-edit", _catalogs["InvoiceSentRange"]);
+        $("#invoiceSent-edit").val(_selectedRecord.invoiceSent);
+
+        loadSelectValues("#invoiceReceived-edit", _catalogs["InvoiceReceivedRange"]);
+        $("#invoiceReceived-edit").val(_selectedRecord.invoiceReceived);
+
+        loadSelectValues("#caseStatus-edit", _catalogs["CaseStatusesRange"]);
+        $("#caseStatus-edit").val(_selectedRecord.caseStatus);
+
+        if (_selectedRecord.dateSettled) {
+            $("#dateSettled-edit").val(moment(_selectedRecord.dateSettled).tz(TIMEZONE).format("MM/DD/YYYY"));
+        } 
+        $("#dateSettled-edit").datepicker();
+        $("#dateSettled-edit").attr("readonly", true);
+
+        loadSelectValues("#recordsRetrieved-edit", _catalogs["RecordsRetrievedRange"]);
+        $("#recordsRetrieved-edit").val(_selectedRecord.recordsRetrieved);
+
+        loadSelectValues("#recordsDuplicated-edit", _catalogs["RecordsDuplicatedRange"]);
+        $("#recordsDuplicated-edit").val(_selectedRecord.recordsDuplicated);
+
+        loadSelectValues("#recordsShredded-edit", _catalogs["RecordsShreddedRange"]);
+        $("#recordsShredded-edit").val(_selectedRecord.recordsShredded);
+
+        loadSelectValues("#recordStatus-edit", _catalogs["RecordStatusesRange"], true);
+        $("#recordStatus-edit").val(_selectedRecord.recordStatus);
+
+        onRecordStatusEditChange();
+    }
+
+    function saveRecord(event) {
+        $.blockUI({ message: null });
+        $.ajax({
+            url: WEBAPP_URL,
+            jsonp: "callback",
+            dataType: "jsonp",  
+            data: {
+                action: "updateRecord",
+                id: $("#id-edit").val(),
+                plaintiff: $("#plaintiff-edit").val(),
+                client: $("#client-edit").val(),
+                expert: $("#expert-edit").val(),
+                jobType: $("#jobType-edit").val(),
+                jobDate: $("#jobDate-edit").val(),
+                trialVenue: $("#trialVenue-edit").val(),
+                trialDate: $("#trialDate-edit").val(),
+                recordsReceived: $("recordsReceived#-edit").val(), // record.rrAdditionalInfo = drValues[i][RR_ADDITIONAL_INFO_COLPOS];
+                formatReceived: $("#formatReceived-edit").val(),
+                formatToSend: $("#formatToSend-edit").val(),
+                scanOrPrint: $("#scanOrPrint-edit").val(),
+                indexed: $("#indexed-edit").val(),
+                indexer: $("#indexer-edit").val(),
+                hoursSpentIndexing: $("#hoursSpentIndexing-edit").val(),
+                sent: $("#sent-edit").val(),
+                currentLocation: $("#currentLocation-edit").val(),
+                reportFinished: $("#reportFinished-edit").val(),
+                invoiceSent: $("#invoiceSent-edit").val(),
+                invoiceReceived: $("#invoiceReceived-edit").val(),
+                caseStatus: $("#caseStatus-edit").val(),
+                dateSettled: $("#dateSettled-edit").val(),
+                recordsRetrieved: $("#recordsRetrieved-edit").val(),
+                recordsDuplicated: $("#recordsDuplicated-edit").val(),
+                recordsShredded: $("#recordsShredded-edit").val(),
+                recordStatus: $("#recordStatus-edit").val(),
+                recordStatus: $("#recordStatus-edit").val(),
+            },
+            success: function(response) {
+                if (response.code != "OK") {
+                    alert("Problems when talking with the server: " +response.data);
+                }                
+                $("#save-edit-btn").removeAttr("disabled");
+                $("#edit-record-modal").modal('hide');
+                activate(_statusesData[$("#recordStatus-edit").val()].tab);
+                $.unblockUI();
+            }
+        });
+    }
+
+    function activate(tab) {
+        console.log("activate("+tab+")" );
+        if (tab === "logs") {
+            activateLogs();
+        } else {
+            var defineFunctionName = "define"+tab[0].toUpperCase() + tab.substring(1)+"Tab";
+            //console.log("defineFunctionName "+defineFunctionName);
+            window[defineFunctionName]();
+            $("#"+tab+"Table").DataTable().ajax.reload();
+            //activates the tab if it is not already the active one
+            var index = $("#tabs a[href='#"+tab+"']").parent().index();
+            $("#tabs").tabs("option", "active", index);
+        } 
+        tableDeselect();
+    }
+
+    function activateLogs() {
+        $.blockUI({ message: null });
+        $.ajax({
+            url: WEBAPP_URL,
+            jsonp: "callback",
+            dataType: "jsonp",
+            data: {
+                action: "getLogs",
+                last: 50
+            },
+            success: function(response) {
+                if (response.code != "OK") {
+                    alert("Problems when talking with the server: " +response.data);
+                     $.unblockUI();
+                    return;
+                }
+                $("#logsTable td").parent().remove();
+                var tableBody = $('#logsTable tbody');
+                response.data.forEach(function(row) {
+                    tableBody.append(
+                        $('<tr>').append(
+                            $('<td style="white-space: nowrap;">').append(
+                                moment(row.timestamp).tz(TIMEZONE).format("MM/DD/YYYY hh:mm:ss")
+                            )
+                        ).append(
+                            $('<td>').append(row.level)
+                        ).append(
+                            $('<td>').append(row.message)
+                        )
+                    );
+                });
+                $.unblockUI();
+            }
+        });
+    }        
+    </script>
+    <style>
+        .glyphicon-alert, .glyphicon-ok {
+            transform:scale(1.5,1.5);
+            -ms-transform:scale(1.5,1.5); /* IE 9 */
+            -moz-transform:scale(1.5,1.5); /* Firefox */
+            -webkit-transform:scale(1.5,1.5); /* Safari and Chrome */
+            -o-transform:scale(1.5,1.5); /* Opera */
+        }
+
+        .ui-datepicker { width: 17em; padding: .2em .2em 0; z-index: 9999 !important; }
+
+    </style>
+</head>
+
+<body>
+    <div id="tabs">
+        <ul>
+            <li><a href="#awaitingSchedule">Awaiting Schedule</a></li>
+            <li><a href="#awaitingRecords">Awaiting Records</a></li>
+            <li><a href="#awaitingIndexing">Awaiting Indexing</a></li>
+            <li><a href="#awaitingShipment">Awaiting Shipment</a></li>
+            <li><a href="#recordShipped">Records Shipped / Awaiting Report</a></li>
+            <li><a href="#reportDone">Report Done</a></li>
+            <li><a href="#awaitingDeposition">Awaiting Deposition</a></li>
+            <li><a href="#awaitingTrial">Awaiting Trial / Arbitration</a></li>
+            <li><a href="#closed">Closed</a></li>
+            <li><a href="#logs">Log</a></li>
+        </ul>
+        <!-- TODO: remove this -->
+        <div id="events"></div>
+        <div id="awaitingSchedule">
+            <table id="awaitingScheduleTable" class="table table-bordered table-striped nowrap" style="width:100%">
+                <thead>
+                    <tr>
+                        <th>Plaintiff Name</th>
+                        <th>Client</th>
+                        <th>Expert</th>
+                        <th>Trial Venue</th>
+                        <th>Trial Date</th>
+                        <th>Id</th>
+                        <th>Contact</th>
+                        <th>Expert Address</th>
+                    </tr>
+                </thead>
+                <tbody />
+            </table>
+        </div>
+        <div id="awaitingRecords">
+            <table id="awaitingRecordsTable" class="table table-bordered table-striped nowrap" style="width:100%">
+                <thead>
+                    <tr>
+                        <th>Plaintiff Name</th>
+                        <th>Client</th>
+                        <th>Expert</th>
+                        <th>Job Type</th>
+                        <th>Job Date</th>
+                        <th>Records Due</th>
+                        <th>Id</th>
+                        <th>Contact</th>
+                        <th>Expert Address</th>
+                    </tr>
+                </thead>
+                <tbody />
+            </table>
+        </div>
+        <div id="awaitingIndexing">
+            <table id="awaitingIndexingTable" class="table table-bordered table-striped nowrap" style="width:100%">
+                <thead>
+                    <tr>
+                        <th>Plaintiff Name</th>
+                        <th>Client</th>
+                        <th>Expert</th>
+                        <th>Job Type</th>
+                        <th>Job Date</th>
+                        <th>Records Due</th>
+                        <th>Indexer</th>
+                        <th>Format to Send</th>
+                        <th>Scanned or Printed</th>
+                        <th>Id</th>
+                        <th>Contact</th>
+                        <th>Expert Address</th>
+                    </tr>
+                </thead>
+                <tbody />
+            </table>
+        </div>
+        <div id="awaitingShipment">
+            <table id="awaitingShipmentTable" class="table table-bordered table-striped nowrap" style="width:100%">
+                <thead>
+                    <tr>
+                        <th>Plaintiff Name</th>
+                        <th>Client</th>
+                        <th>Expert</th>
+                        <th>Job Type</th>
+                        <th>Job Date</th>
+                        <th>Records Due</th>
+                        <th>Format to Send</th>
+                        <th>Id</th>
+                        <th>Contact</th>
+                        <th>Expert Address</th>
+                    </tr>
+                </thead>
+                <tbody />
+            </table>
+        </div>        
+        <div id="recordShipped">
+            <table id="recordShippedTable" class="table table-bordered table-striped nowrap" style="width:100%">
+                <thead>
+                    <tr>
+                        <th>Plaintiff Name</th>
+                        <th>Client</th>
+                        <th>Expert</th>
+                        <th>Job Date</th><!--<th>Report format</th> -->
+                        <th>Id</th>
+                        <th>Contact</th>
+                        <th>Expert Address</th>
+                    </tr>
+                </thead>
+                <tbody />
+            </table>
+        </div>        
+        <div id="reportDone">
+            <table id="reportDoneTable" class="table table-bordered table-striped nowrap" style="width:100%">
+                <thead>
+                    <tr>
+                        <th>Plaintiff Name</th>
+                        <th>Client</th>
+                        <th>Expert</th>
+                        <th>Invoice Sent</th>
+                        <th>Invoice Received</th>
+                        <th>Trial Date</th>
+                        <th>Id</th>
+                        <th>Contact</th>
+                        <th>Expert Address</th>
+                    </tr>
+                </thead>
+                <tbody />
+            </table>
+        </div>        
+        <div id="awaitingDeposition">
+            <table id="awaitingDepositionTable" class="table table-bordered table-striped nowrap" style="width:100%">
+                <thead>
+                    <tr>
+                        <th>Plaintiff Name</th>
+                        <th>Client</th>
+                        <th>Expert</th>
+                        <th>Records Retrieved</th>
+                        <th>Records Duplicated</th>
+                        <th>Id</th>
+                        <th>Contact</th>
+                        <th>Expert Address</th>
+                    </tr>
+                </thead>
+                <tbody />
+            </table>
+        </div>        
+        <div id="awaitingTrial">
+            <table id="awaitingTrialTable" class="table table-bordered table-striped nowrap" style="width:100%">
+                <thead>
+                    <tr>
+                        <th>Plaintiff Name</th>
+                        <th>Client</th>
+                        <th>Expert</th>
+                        <th>Trial Venue</th>
+                        <th>Trial Date</th>
+                        <th>Records Retrieved</th>
+                        <th>Records Duplicated</th>
+                        <th>Id</th>
+                        <th>Contact</th>
+                        <th>Expert Address</th>
+                    </tr>
+                </thead>
+                <tbody />
+            </table>
+        </div>        
+        <div id="closed">
+            <table id="closedTable" class="table table-bordered table-striped nowrap" style="width:100%">
+                <thead>
+                    <tr>
+                        <th>Plaintiff Name</th>
+                        <th>Client</th>
+                        <th>Expert</th>
+                        <th>Date Settlet</th>
+                        <th>Invoice Received</th>
+                        <th>Records Shredded</th>
+                        <th>Id</th>
+                        <th>Contact</th>
+                        <th>Expert Address</th>
+                    </tr>
+                </thead>
+                <tbody />
+            </table>
+        </div>        
+          <div id="logs">
+            <table id="logsTable" class="table table-bordered table-striped">
+                <thead>
+                    <tr>
+                        <th>Timestamp</th>
+                        <th>Level</th>
+                        <th>Message</th>
+                    </tr>
+                </thead>
+                <tbody />
+            </table>
+        </div>
+        <button id="newRecordBtn" class="btn btn-primary" data-toggle='modal' data-target='#new-record-modal'>New</button>
+        <button id="editRecordBtn" class="btn btn-success" data-toggle='modal' data-target='#edit-record-modal'>Edit</button>
+        <button id="deleteNewRecordBtn" class="btn btn-danger" data-toggle='modal' data-target='#delete-record-modal'>Delete</button>
+    </div>
+    <div class="modal fade" id="new-record-modal" tabindex="-1" role="dialog">
+        <div class="modal-dialog">
+            <div id="new-record-content" class="modal-content">
+                
+                <form id="new-record-form" data-toggle="validator" data-disable="true" role="form" name="modalForm" action="#" >
+
+                <div class="modal-header">
+                    <button type="button" class="close" data-dismiss="modal"> <span aria-hidden="true" class="">x</span><span class="sr-only">Close</span>
+                    </button>
+                    <h4 class="modal-title" id="myModalLabel">New Record</h4>
+                </div>
+                <div id="new-record-body" class="modal-body">
+                    <div class="form-group  has-feedback">
+                        <label for="name">Plaintiff</label>
+                        <div class="input-group">
+                            <input class="form-control" name="plaintiff" id="plaintiff" required/>
+                            <span class="glyphicon form-control-feedback" aria-hidden="true"></span>
+                            <div class="help-block with-errors"></div>
+                        </div>
+                    </div>
+                    <div class="form-group has-feedback">
+                        <label for="client">Client</label>
+                        <div class="input-group">
+                            <select class="form-control" name="client" id="client" required></select>
+                            <span class="glyphicon form-control-feedback" aria-hidden="true"></span>
+                            <div class="help-block with-errors"></div>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="expert">Expert</label>
+                        <div class="input-group">
+                            <select class="form-control" name="expert" id="expert"></select>
+                        </div>
+                    </div>
+                    <div class="form-group has-feedback">
+                        <label for="trialVenue">Trial venue</label>
+                        <div class="input-group">
+                            <input class="form-control" name="trialVenue" id="trialVenue" required/>
+                            <span class="glyphicon form-control-feedback" aria-hidden="true"></span>
+                            <div class="help-block with-errors"></div>
+                        </div>
+                    </div>                    
+                    <div class="form-group">
+                        <label for="trialDate">Trial date</label>
+                        <input class="form-control" name="trialDate" id="trialDate" />
+                    </div>                    
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+                    <button id="create-btn" type="submit" class="btn btn-primary">Create record</button>
+                </div>
+
+                </form>
+
+            </div>
+        </form>
+        </div>
+    </div>    
+    <div class="modal fade" id="edit-record-modal" tabindex="-1" role="dialog">
+        <div class="modal-dialog modal-lg">
+            <div id="edit-record-content" class="modal-content">
+                
+                <form id="edit-record-form" data-disable="true" role="form" name="modalForm" action="#" >
+                    <input type="hidden" name="id" id="id-edit" value="" />
+
+                <div class="modal-header">
+                    <button type="button" class="close" data-dismiss="modal"> <span aria-hidden="true" class="">x</span><span class="sr-only">Close</span>
+                    </button>
+                    <h4 class="modal-title" id="myModalLabel">Edit Record</h4>
+                </div>
+                <div id="edit-record-body" class="modal-body">
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="form-group has-feedback">
+                                <label for="name">Plaintiff</label>
+                                <div class="input-group">
+                                    <input class="form-control" name="plaintiff" id="plaintiff-edit"/>
+                                    <span class="glyphicon form-control-feedback" aria-hidden="true"></span>
+                                    <div class="help-block with-errors"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="form-group has-feedback">
+                                <label for="client">Client</label>
+                                <div class="input-group">
+                                    <select class="form-control" name="client" id="client-edit"></select>
+                                    <span class="glyphicon form-control-feedback" aria-hidden="true"></span>
+                                    <div class="help-block with-errors"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="form-group has-feedback">
+                                <label for="expert">Expert</label>
+                                <div class="input-group">
+                                    <select class="form-control" name="expert" id="expert-edit"></select>
+                                    <span class="glyphicon form-control-feedback" aria-hidden="true"></span>
+                                    <div class="help-block with-errors"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-2">
+                            <div class="form-group has-feedback">
+                                <label for="jobType">Job type</label>
+                                <div class="input-group">
+                                    <select class="form-control" name="jobType" id="jobType-edit"></select>
+                                    <span class="glyphicon form-control-feedback" aria-hidden="true"></span>
+                                    <div class="help-block with-errors"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-2">
+                            <div class="form-group has-feedback">
+                                <label for="expert">Job date</label>
+                                <div class="input-group">
+                                    <input class="form-control" name="jobDate" id="jobDate-edit"/>
+                                    <span class="glyphicon form-control-feedback" aria-hidden="true"></span>
+                                    <div class="help-block with-errors"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-2">
+                            <div class="form-group has-feedback">
+                                <label for="trialVenue">Trial venue</label>
+                                <div class="input-group">
+                                    <input class="form-control" name="trialVenue" id="trialVenue-edit"/>
+                                    <span class="glyphicon form-control-feedback" aria-hidden="true"></span>
+                                    <div class="help-block with-errors"></div>
+                                </div>
+                            </div> 
+                        </div>
+                        <div class="col-md-2">
+                            <div class="form-group has-feedback">
+                                <label for="trialDate">Trial date</label>
+                                <div class="input-group">
+                                    <input class="form-control" name="trialDate" id="trialDate-edit"/>
+                                    <span class="glyphicon form-control-feedback" aria-hidden="true"></span>
+                                    <div class="help-block with-errors"></div>
+                                </div>                        
+                            </div> 
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-2">
+                            <div class="form-group has-feedback">
+                                <label for="recordsReceived">Records received</label>
+                                <div class="input-group">
+                                    <select class="form-control" name="recordsReceived" id="recordsReceived-edit"></select>
+                                    <span class="glyphicon form-control-feedback" aria-hidden="true"></span>
+                                    <div class="help-block with-errors"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-2">
+                            <div class="form-group has-feedback">
+                                <label for="expert">Format received</label>
+                                <div class="input-group">
+                                    <input class="form-control" name="formatReceived" id="formatReceived-edit"/>
+                                    <span class="glyphicon form-control-feedback" aria-hidden="true"></span>
+                                    <div class="help-block with-errors"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-2">
+                            <div class="form-group has-feedback">
+                                <label for="scanOrPrint">Scan or print</label>
+                                <div class="input-group">
+                                    <select class="form-control" name="scanOrPrint" id="scanOrPrint-edit"></select>
+                                    <div class="help-block with-errors"></div>
+                                </div>
+                            </div> 
+                        </div>
+                        <div class="col-md-2">
+                            <div class="form-group has-feedback">
+                                <label for="indexed">Indexed</label>
+                                <div class="input-group">
+                                    <select class="form-control" name="indexed" id="indexed-edit"></select>
+                                    <span class="glyphicon form-control-feedback" aria-hidden="true"></span>
+                                    <div class="help-block with-errors"></div>
+                                </div>
+                            </div> 
+                        </div>
+                        <div class="col-md-2">
+                             <div class="form-group has-feedback">
+                                <label for="indexer">Indexer</label>
+                                <div class="input-group">
+                                    <select class="form-control" name="indexer" id="indexer-edit"></select>
+                                    <span class="glyphicon form-control-feedback" aria-hidden="true"></span>
+                                    <div class="help-block with-errors"></div>
+                                </div>
+                            </div>    
+                        </div>
+                        <div class="col-md-2">
+                            <div class="form-group has-feedback">
+                                <label for="hoursSpentIndexing">Hours indexing</label>
+                                <div class="input-group">
+                                    <input type="number" min="0" class="form-control" name="hoursSpentIndexing" id="hoursSpentIndexing-edit" />
+                                    <span class="glyphicon form-control-feedback" aria-hidden="true"></span>
+                                    <div class="help-block with-errors"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-2">
+                            <div class="form-group has-feedback">
+                                <label for="currentLocation">Current location</label>
+                                <div class="input-group">
+                                    <select class="form-control" name="currentLocation" id="currentLocation-edit"></select>
+                                    <span class="glyphicon form-control-feedback" aria-hidden="true"></span>
+                                    <div class="help-block with-errors"></div>
+                                </div>
+                            </div>
+                        </div>                        
+                    </div>
+                    <div class="row">
+                        <div class="col-md-2">
+                            <div class="form-group has-feedback">
+                                <label for="reportFinished">Report Finished</label>
+                                <div class="input-group">
+                                    <select class="form-control" name="reportFinished" id="reportFinished-edit"></select>
+                                    <span class="glyphicon form-control-feedback" aria-hidden="true"></span>
+                                    <div class="help-block with-errors"></div>
+                                </div>
+                            </div> 
+                        </div>
+                        <div class="col-md-2">
+                            <div class="form-group has-feedback">
+                                <label for="invoiceSent">Invoice sent</label>
+                                <div class="input-group">
+                                    <select class="form-control" name="invoiceSent" id="invoiceSent-edit"></select>
+                                    <span class="glyphicon form-control-feedback" aria-hidden="true"></span>
+                                    <div class="help-block with-errors"></div>
+                                </div>
+                            </div> 
+                        </div>
+                        <div class="col-md-2">
+                             <div class="form-group has-feedback">
+                                <label for="invoiceReceived">Invoice received</label>
+                                <div class="input-group">
+                                    <select class="form-control" name="invoiceReceived" id="invoiceReceived-edit"></select>
+                                    <span class="glyphicon form-control-feedback" aria-hidden="true"></span>
+                                    <div class="help-block with-errors"></div>
+                                </div>
+                            </div>    
+                        </div>
+                        <div class="col-md-2">
+                             <div class="form-group has-feedback">
+                                <label for="dateSettled">Date settled</label>
+                                <div class="input-group">
+                                    <input class="form-control" name="dateSettled" id="dateSettled-edit"/>
+                                    <span class="glyphicon form-control-feedback" aria-hidden="true"></span>
+                                    <span class="glyphicon form-control-feedback" aria-hidden="true"></span>
+                                    <div class="help-block with-errors"></div>
+                                </div>                        
+                            </div> 
+                        </div>                        
+                    </div>
+                    <div class="row">
+                        <div class="col-md-2">
+                             <div class="form-group has-feedback">
+                                <label for="recordsRetrieved">Records retrieved</label>
+                                <div class="input-group">
+                                    <select class="form-control" name="recordsRetrieved" id="recordsRetrieved-edit"></select>
+                                    <span class="glyphicon form-control-feedback" aria-hidden="true"></span>
+                                    <div class="help-block with-errors"></div>
+                                </div>
+                            </div>    
+                        </div>
+                        <div class="col-md-2">
+                             <div class="form-group has-feedback">
+                                <label for="recordsDuplicated">Records duplicated</label>
+                                <div class="input-group">
+                                    <select class="form-control" name="recordsDuplicated" id="recordsDuplicated-edit"></select>
+                                    <span class="glyphicon form-control-feedback" aria-hidden="true"></span>
+                                    <div class="help-block with-errors"></div>
+                                </div>
+                            </div>    
+                        </div>
+                        <div class="col-md-2">
+                             <div class="form-group has-feedback">
+                                <label for="recordsShredded">Records shredded</label>
+                                <div class="input-group">
+                                    <select class="form-control" name="recordsShredded" id="recordsShredded-edit"></select>
+                                    <span class="glyphicon form-control-feedback" aria-hidden="true"></span>
+                                    <div class="help-block with-errors"></div>
+                                </div>
+                            </div>    
+                        </div>
+                        <div class="col-md-2">
+                             <div class="form-group has-feedback">
+                                <label for="caseStatus">Case status</label>
+                                <div class="input-group">
+                                    <select class="form-control" name="caseStatus" id="caseStatus-edit"></select>
+                                    <span class="glyphicon form-control-feedback" aria-hidden="true"></span>
+                                    <div class="help-block with-errors"></div>
+                                </div>
+                            </div>    
+                        </div>
+                        <div class="col-md-4">
+                            <div class="form-group has-feedback">
+                                <label for="recordStatus">Record status</label>
+                                <div class="input-group">
+                                    <select class="form-control" name="recordStatus" id="recordStatus-edit"></select>
+                                    <span class="glyphicon form-control-feedback" aria-hidden="true"></span>
+                                    <div class="help-block with-errors"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+                    <button id="save-edit-btn" type="submit" class="btn btn-primary">Save changes</button>
+                </div>
+
+                </form>
+
+            </div>
+        </form>
+        </div>
+    </div>   
+    <div class="modal fade" id="delete-record-modal" tabindex="-1" role="dialog" >
+        <div class="modal-dialog">
+            <div class="modal-content">
+
+                <form id="delete-record-form" role="form" name="modalForm" action="#" >
+
+                <div class="modal-header">
+                    <button type="button" class="close" data-dismiss="modal"> <span>x</span><span class="sr-only">Close</span>
+                    </button>
+                    <h4 class="modal-title">Confirmation needed</h4>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" name="id" id="id-to-be-removed" value="" />
+                    <p><span class="ui-icon ui-icon-alert" style="float:left; margin:0 7px 20px 0;"></span>This record will be permanently deleted. Are you sure?</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
+                    <button id="delete-btn" type="button" class="btn btn-primary">Do it!</button>
+                </div>
+
+                </form>
+            </div>
+        </div>
+    </div>
+</body>
+
+</html>
