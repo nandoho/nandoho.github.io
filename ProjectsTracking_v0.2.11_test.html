@@ -664,6 +664,7 @@
             loadSelectValues("#logger", _catalogs["LoggersRange"]);
             loadSelectValues("#recordsSent", _catalogs["RecordsSentRange"], true);
             $("#logRecordItem-form")[0].reset();
+            $("#lri-action").val("add");
         });
 
         $("#dateSent").datepicker();
@@ -676,13 +677,15 @@
             loadSelectValues("#recordsSent", _catalogs["RecordsSentRange"], true);
 
             var table = $("#logRecordTable").DataTable();
-            var row = table.row().data();
+            var idx = table.cell('.selected', 0).index();
+            var data = table.row( idx.row ).data();
 
-            $("#format").val(row.format);
-            $("#recordDetails").val(row.recordDetails);
-            $("#logger").val(row.logger);
-            $("#recordsSent").val(row.recordsSent);
-            $("#dateSent").val(row.dateSent);
+            $("#lri-action").val("edit");
+            $("#format").val(data.format);
+            $("#recordDetails").val(data.recordDetails);
+            $("#logger").val(data.logger);
+            $("#recordsSent").val(data.recordsSent);
+            $("#dateSent").val(data.dateSent);
         });
 
         $("#remove_logrecord-btn").off("click");
@@ -937,7 +940,16 @@
             ],
             columnDefs: [{ 
                 targets: 4,
-                render:  renderCellAsDate,
+                render: function(data, type, row, meta) {
+                    //this has to be different due to the storage being different
+                    if ( type === 'display' || type === 'filter' ) {
+                        if (!data){
+                            return ""; 
+                        }    
+                        return moment(data, "MM/DD/YYYY").format('MMMM Do YYYY');
+                    }
+                    return data;    
+                }, 
             }],     
         });
         definelogRecordTableEvents(table); 
@@ -954,13 +966,24 @@
             if (!e.isDefaultPrevented()) {
                 $("#save-logrecorditem-btn").attr("disabled", "disabled");
                 var table = $("#logRecordTable").DataTable();  
-                table.row.add({
-                    format:$("#format").val(),
-                    recordDetails:$("#recordDetails").val(),
-                    logger:$("#logger").val(),
-                    recordsSent:$("#recordsSent").val(),
-                    dateSent:$("#dateSent").val(),
-                });
+                if ($("#lri-action").val() == "add") {
+                    table.row.add({
+                        format:$("#format").val(),
+                        recordDetails:$("#recordDetails").val(),
+                        logger:$("#logger").val(),
+                        recordsSent:$("#recordsSent").val(),
+                        dateSent:$("#dateSent").val(),
+                    });
+                } else {
+                    var idx = table.cell('.selected', 0).index();
+                    var data = table.row(idx.row).data();
+                    data.format = $("#format").val();
+                    data.recordDetails = $("#recordDetails").val();
+                    data.logger = $("#logger").val();
+                    data.recordsSent = $("#recordsSent").val();
+                    data.dateSent = $("#dateSent").val();
+                    table.row(idx.row).invalidate();
+                }
                 table.draw();
                 $("#logRecordItem-modal").modal('hide');
                 $("#save-logrecorditem-btn").removeAttr("disabled");
@@ -1754,6 +1777,7 @@
             <div id="logRecordItem-content" class="modal-content">
                 
                 <form id="logRecordItem-form" data-disable="true" role="form" name="modalForm" action="#" >
+                    <input type="hidden" name="lri-action" id="lri-action" value="" />
 
                 <div class="modal-header">
                     <button type="button" class="close" data-dismiss="modal"> <span aria-hidden="true" class="">x</span><span class="sr-only">Close</span>
