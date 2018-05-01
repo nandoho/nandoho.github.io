@@ -691,7 +691,8 @@
         $("#remove_logrecord-btn").off("click");
         $("#remove_logrecord-btn").click(function(){
             var table = $("#logRecordTable").DataTable();
-            table.row().remove().draw(false);
+            var idx = table.cell('.selected', 0).index();
+            table.row(idx.row).remove().draw(false);
         });
     }
 
